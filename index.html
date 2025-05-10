@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voice Controlled Ball Game</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+      background: skyblue;
+    }
+    canvas {
+      display: none;
+    }
+    #startScreen, #gameOver {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      text-align: center;
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+    }
+    #gameOver {
+      display: none;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 1em;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="startScreen">
+    <h2>Enter Player Name</h2>
+    <input type="text" id="playerName" placeholder="Your Name" />
+    <br/>
+    <button onclick="startGame()">Play</button>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="gameOver">
+    <h2>Game Over</h2>
+    <p id="scoreMsg"></p>
+    <button onclick="restartGame()">Restart</button>
+  </div>
+
+  <audio id="bgMusic" loop autoplay>
+    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg" />
+  </audio>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const gameOverDiv = document.getElementById('gameOver');
+    const startScreen = document.getElementById('startScreen');
+    const scoreMsg = document.getElementById('scoreMsg');
+    let width, height;
+
+    let player = { name: "", score: 0 };
+
+    let ball = {
+      x: 100,
+      y: 200,
+      radius: 20,
+      vy: 0,
+      gravity: 0.2,
+      lift: -5
+    };
+
+    let wall = {
+      x: 800,
+      width: 60,
+      gap: 180,
+      top: Math.random() * 200 + 50,
+      speed: 2
+    };
+
+    let micLevel = 0;
+    let listening = false;
+
+    function setupMic() {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        const context = new AudioContext();
+        const mic = context.createMediaStreamSource(stream);
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 256;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        mic.connect(analyser);
+        function checkSound() {
+          analyser.getByteFrequencyData(dataArray);
+          let avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+          micLevel = avg;
+          requestAnimationFrame(checkSound);
+        }
+        checkSound();
+      });
+    }
+
+    function drawBall() {
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'red';
+      ctx.fill();
+    }
+
+    function drawWall() {
+      ctx.fillStyle = 'green';
+      ctx.fillRect(wall.x, 0, wall.width, wall.top);
+      ctx.fillRect(wall.x, wall.top + wall.gap, wall.width, height - wall.top - wall.gap);
+    }
+
+    function updateGame() {
+      ctx.clearRect(0, 0, width, height);
+
+      // Ball control
+      if (micLevel > 30) {
+        ball.vy = ball.lift;
+      } else {
+        ball.vy += ball.gravity;
+      }
+      ball.y += ball.vy;
+
+      // Wall update
+      wall.x -= wall.speed;
+      if (wall.x + wall.width < 0) {
+        wall.x = width;
+        wall.top = Math.random() * 200 + 50;
+        player.score++;
+      }
+
+      // Collision
+      if (
+        ball.y - ball.radius < 0 || 
+        ball.y + ball.radius > height ||
+        (ball.x + ball.radius > wall.x && ball.x - ball.radius < wall.x + wall.width &&
+         (ball.y - ball.radius < wall.top || ball.y + ball.radius > wall.top + wall.gap))
+      ) {
+        gameOver();
+        return;
+      }
+
+      drawBall();
+      drawWall();
+      if (listening) requestAnimationFrame(updateGame);
+    }
+
+    function startGame() {
+      const nameInput = document.getElementById('playerName').value.trim();
+      if (!nameInput) {
+        alert("Please enter your name");
+        return;
+      }
+      player.name = nameInput;
+      player.score = 0;
+
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      ball.y = height / 2;
+      ball.vy = 0;
+      wall.x = width;
+      wall.top = Math.random() * 200 + 50;
+
+      startScreen.style.display = 'none';
+      canvas.style.display = 'block';
+      listening = true;
+      setupMic();
+      updateGame();
+    }
+
+    function gameOver() {
+      listening = false;
+      canvas.style.display = 'none';
+      scoreMsg.innerText = `${player.name}, your score: ${player.score}`;
+      gameOverDiv.style.display = 'block';
+    }
+
+    function restartGame() {
+      gameOverDiv.style.display = 'none';
+      canvas.style.display = 'block';
+      ball.y = height / 2;
+      ball.vy = 0;
+      wall.x = width;
+      wall.top = Math.random() * 200 + 50;
+      player.score = 0;
+      listening = true;
+      updateGame();
+    }
+  </script>
+</body>
+</html>
